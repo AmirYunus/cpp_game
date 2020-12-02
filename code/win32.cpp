@@ -28,11 +28,37 @@ global_variable BITMAPINFO BitmapInfo;	//temporary global variable; to change la
 global_variable void* BitmapMemory;	//temporary global variable; to change later
 global_variable int BitmapWidth;	//temporary global variable; to change later
 global_variable int BitmapHeight;	//temporary global variable; to change later
+global_variable int BytesPerPixel = 4;
 //global_variable HBITMAP BitmapHandle;
 //global_variable HDC BitmapDeviceContext;
 
+internal void RenderWeirdGradient( int XOffset , int YOffset )
+{
+	int Width = BitmapWidth;
+	int Height = BitmapHeight;
+	int Pitch = Width * BytesPerPixel;
+
+	uint8* Row = ( uint8* ) BitmapMemory;
+	for ( int Y = 0;
+		Y < BitmapHeight;
+		++Y )
+	{
+		uint32* Pixel = ( uint32* ) Row;
+		for ( int X = 0;
+			X < BitmapWidth;
+			++X )
+		{
+			uint8 Blue = ( X + XOffset );
+			uint8 Green = ( Y + YOffset );
+
+			*Pixel++ = ( ( Green << 8 ) | Blue );
+		}
+		Row += Pitch;
+	}
+}
+
 internal void Win32ResizeDIBSection(
-	int Width,	//to insert comment
+	int Width ,	//to insert comment
 	int Height	//to insert comment
 )	//DIB: Device Independent Bitmap
 {
@@ -51,7 +77,7 @@ internal void Win32ResizeDIBSection(
 
 	if ( BitmapMemory )
 	{
-		VirtualFree( BitmapMemory, 0, MEM_RELEASE );
+		VirtualFree( BitmapMemory , 0 , MEM_RELEASE );
 	}
 
 	BitmapWidth = Width;
@@ -76,69 +102,44 @@ internal void Win32ResizeDIBSection(
 	//								0	//to insert comment
 	//);	//to insert comment
 
-	int BytesPerPixel = 4;
 	int BitmapMemorySize = ( BitmapWidth * BitmapHeight ) * BytesPerPixel;
-	BitmapMemory = VirtualAlloc( 0, BitmapMemorySize, MEM_COMMIT, PAGE_READWRITE );
+	BitmapMemory = VirtualAlloc( 0 , BitmapMemorySize , MEM_COMMIT , PAGE_READWRITE );
 
-	int Pitch = Width * BytesPerPixel;
-	uint8* Row = ( uint8* ) BitmapMemory;
-	for ( int Y = 0;
-		Y < BitmapHeight;
-		++Y )
-	{
-		uint8* Pixel = ( uint8* ) Row;
-		for ( int X = 0;
-			X < BitmapWidth;
-			++X )
-		{
-			*Pixel = 0;	//blue
-			++Pixel;
-
-			*Pixel = 0;	//green
-			++Pixel;
-
-			*Pixel = 255;	//red
-			++Pixel;
-
-			*Pixel = 0;	//padding
-			++Pixel;
-		}
-		Row += Pitch;
-	}
+	//to do clear window to black
 }
 
 internal void Win32UpdateWindow(
-	HDC DeviceContext,	//to insert comment
-	RECT* WindowRect,	//to insert comment
-	int	X,	//to insert comment
-	int Y,	//to insert comment
-	int Width,	//to insert comment
+	HDC DeviceContext ,	//to insert comment
+	RECT* ClientRect ,	//to insert comment
+	int	X ,	//to insert comment
+	int Y ,	//to insert comment
+	int Width ,	//to insert comment
 	int Height	//to insert comment
 )	//to insert comment
 {
-	int WindowWidth = WindowRect->right - WindowRect->left;
-	int WindowHeight = WindowRect->bottom - WindowRect->top;
+	int WindowWidth = ClientRect->right - ClientRect->left;
+	int WindowHeight = ClientRect->bottom - ClientRect->top;
 
 	StretchDIBits(
-		DeviceContext,	//to insert comment
-		0,	//X,	//to insert comment
-		0,	//Y,	//to insert comment
-		BitmapWidth,	//Width,	//to insert comment
-		BitmapHeight,	//Height,	//to insert comment
-		0,	//X,	//to insert comment
-		0,	//Y,	//to insert comment	//temporary global variable; to change later
-		WindowWidth,	//Width,	//to insert comment
-		WindowHeight,	//Height,	//to insert comment
-		BitmapMemory,	//to insert comment
-		&BitmapInfo,	//to insert comment
-		DIB_RGB_COLORS, SRCCOPY	//to insert comment
+		DeviceContext ,	//to insert comment
+		0 ,	//X,	//to insert comment
+		0 ,	//Y,	//to insert comment
+		BitmapWidth ,	//Width,	//to insert comment
+		BitmapHeight ,	//Height,	//to insert comment
+		0 ,	//X,	//to insert comment
+		0 ,	//Y,	//to insert comment	//temporary global variable; to change later
+		WindowWidth ,	//Width,	//to insert comment
+		WindowHeight ,	//Height,	//to insert comment
+		BitmapMemory ,	//to insert comment
+		&BitmapInfo ,	//to insert comment
+		DIB_RGB_COLORS , SRCCOPY	//to insert comment
 	);	//to insert comment
 }
 
 LRESULT CALLBACK Win32MainWindowCallBack(
-	HWND Window,	//to insert comment
-	UINT Message,	//to insert comment
-	WPARAM WParam,	//to insert comment
+	HWND Window ,	//to insert comment
+	UINT Message ,	//to insert comment
+	WPARAM WParam ,	//to insert comment
 	LPARAM LParam	//to insert comment
 )	//function that processes messages sent to a window
 {
@@ -149,10 +150,10 @@ LRESULT CALLBACK Win32MainWindowCallBack(
 		case WM_SIZE:	//to insert comment
 		{
 			RECT ClientRect;	//to insert comment
-			GetClientRect( Window, &ClientRect );	//to insert comment
+			GetClientRect( Window , &ClientRect );	//to insert comment
 			int Width = ClientRect.right - ClientRect.left;	//to insert comment
 			int Height = ClientRect.bottom - ClientRect.top;	//to insert comment
-			Win32ResizeDIBSection( Width, Height );	//to insert comment
+			Win32ResizeDIBSection( Width , Height );	//to insert comment
 			//OutputDebugStringA("WM_SIZE\n");
 		}break;
 
@@ -176,14 +177,14 @@ LRESULT CALLBACK Win32MainWindowCallBack(
 		case WM_PAINT:	//to insert comment
 		{
 			PAINTSTRUCT Paint;	//to insert comment
-			HDC DeviceContext = BeginPaint( Window, &Paint );	//to insert comment
+			HDC DeviceContext = BeginPaint( Window , &Paint );	//to insert comment
 			int X = Paint.rcPaint.left;	//to insert comment
 			int Y = Paint.rcPaint.top;	//to insert comment
 			int Height = Paint.rcPaint.bottom - Paint.rcPaint.top;	//to insert comment
 			int Width = Paint.rcPaint.right - Paint.rcPaint.left;	//to insert comment
 			RECT ClientRect;
-			GetClientRect( Window, &ClientRect );
-			Win32UpdateWindow( DeviceContext, &ClientRect, X, Y, Width, Height );	//to insert comment
+			GetClientRect( Window , &ClientRect );
+			Win32UpdateWindow( DeviceContext , &ClientRect , X , Y , Width , Height );	//to insert comment
 			//local_persist DWORD Operation = WHITENESS;	//to insert comment
 			//PatBlt(DeviceContext, X, Y, Width, Height, Operation);	//to insert comment
 			//if (Operation == WHITENESS)	//to insert comment
@@ -194,21 +195,21 @@ LRESULT CALLBACK Win32MainWindowCallBack(
 			//{
 			//	Operation = WHITENESS;	//to insert comment
 			//}
-			EndPaint( Window, &Paint );	//to insert comment
+			EndPaint( Window , &Paint );	//to insert comment
 		}break;	//to insert comment
 
 		default:	//to insert comment
 		{
 			//OutputDebugStringA("default\n");
-			Result = DefWindowProc( Window, Message, WParam, LParam );	//to insert comment
+			Result = DefWindowProc( Window , Message , WParam , LParam );	//to insert comment
 		}break;	//to insert comment
 	}
 	return( Result );	//to insert comment
 }
 
-int WINAPI wWinMain( HINSTANCE Instance,	//to insert comment
-	HINSTANCE PrevInstance,	//to insert comment
-	PWSTR CommandLine,	//to insert comment
+int WINAPI wWinMain( HINSTANCE Instance ,	//to insert comment
+	HINSTANCE PrevInstance ,	//to insert comment
+	PWSTR CommandLine ,	//to insert comment
 	int ShowCode	//to insert comment
 ) //WinMain entry point
 {
@@ -222,36 +223,49 @@ int WINAPI wWinMain( HINSTANCE Instance,	//to insert comment
 
 	if ( RegisterClass( &WindowClass ) )	//to insert comment
 	{
-		HWND WindowHandle = CreateWindowExA(
-			0,	//to insert comment
-			WindowClass.lpszClassName,	//to insert comment
-			"cpp_game",	//to insert comment
-			WS_OVERLAPPEDWINDOW | WS_VISIBLE,	//to insert comment
-			CW_USEDEFAULT,	//to insert comment
-			CW_USEDEFAULT,	//to insert comment
-			CW_USEDEFAULT,	//to insert comment
-			CW_USEDEFAULT,	//to insert comment
-			0,	//to insert comment
-			0,	//to insert comment
-			Instance,	//to insert comment
+		HWND Window = CreateWindowExA(
+			0 ,	//to insert comment
+			WindowClass.lpszClassName ,	//to insert comment
+			"cpp_game" ,	//to insert comment
+			WS_OVERLAPPEDWINDOW | WS_VISIBLE ,	//to insert comment
+			CW_USEDEFAULT ,	//to insert comment
+			CW_USEDEFAULT ,	//to insert comment
+			CW_USEDEFAULT ,	//to insert comment
+			CW_USEDEFAULT ,	//to insert comment
+			0 ,	//to insert comment
+			0 ,	//to insert comment
+			Instance ,	//to insert comment
 			0	//to insert comment
 		);	//to insert comment
-		if ( WindowHandle != NULL )	//to insert comment
+		if ( Window != NULL )	//to insert comment
 		{
+			int XOffset = 0;
+			int YOffset = 0;
 			Running = true;	//to insert comment
+
 			while ( Running )	//to insert comment
 			{
 				MSG Message;	//to insert comment
-				BOOL MessageResult = GetMessage( &Message, 0, 0, 0 );	//to insert comment
-				if ( MessageResult > 0 )	//to insert comment
+				while ( PeekMessage( &Message , 0 , 0 , 0 , PM_REMOVE ) )
 				{
+					if ( Message.message == WM_QUIT )
+					{
+						Running = false;
+					}
 					TranslateMessage( &Message );	//to insert comment
 					DispatchMessage( &Message );	//to insert comment
 				}
-				else
-				{
-					break;	//to insert comment
-				}
+				RECT ClientRect;	//to insert comment
+				GetClientRect( Window , &ClientRect );	//to insert comment
+				int WindowWidth = ClientRect.right - ClientRect.left;
+				int WindowHeight = ClientRect.bottom - ClientRect.top;
+				HDC DeviceContext = GetDC( Window );
+
+				RenderWeirdGradient( XOffset , YOffset );
+				Win32UpdateWindow( DeviceContext , &ClientRect , 0 , 0 , WindowWidth , WindowHeight );
+				ReleaseDC( Window , DeviceContext );
+				++XOffset;
+
 			}
 		}
 		else
