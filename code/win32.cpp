@@ -6,12 +6,20 @@
  * Notice: (C) Copyright 2020 by Amir Yunus. All Rights Reserved.	*
  * ================================================================ */
 
-#include <windows.h>	//include windows header files
-#include <stdint.h>	
+#include <windows.h>	//header files for WinMain
+#include <stdint.h>	//header files for int and uint definitions
+#include <xinput.h>	//header files for xbox360 controller input
 
 #define internal static	//define static functions as internal
 #define local_persist static	//define local static as local_persist
 #define global_variable static	//define global static as global_variable
+#define X_INPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE *pState)
+#define X_INPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION *pVibration)
+#define XInputGetState XInputGetState_ 
+#define XInputSetState XInputSetState_
+
+typedef X_INPUT_GET_STATE( x_input_get_state );
+typedef X_INPUT_SET_STATE( x_input_set_state );
 
 typedef int8_t int8;
 typedef int16_t int16;
@@ -39,7 +47,7 @@ struct win32_window_dimension
 	int Height;
 };
 
-win32_window_dimension Win32GetWindowDimension( HWND Window )
+internal win32_window_dimension Win32GetWindowDimension( HWND Window )
 {
 	win32_window_dimension Result;
 
@@ -51,8 +59,31 @@ win32_window_dimension Win32GetWindowDimension( HWND Window )
 	return( Result );
 };
 
+X_INPUT_GET_STATE( XInputGetStateStub )
+{
+	return( 0 );
+}
+
+X_INPUT_SET_STATE( XInputSetStateStub )
+{
+	return( 0 );
+}
+
+global_variable x_input_get_state* XInputGetState_ = XInputGetStateStub;
+global_variable x_input_set_state* XInputSetState_ = XInputSetStateStub;
 global_variable bool GlobalRunning = 0;
 global_variable win32_offscreen_buffer GlobalBackbuffer;
+
+internal void Win32LoadXInput( void )
+{
+	HMODULE XInputLibrary = LoadLibrary( "xinput1_3.dll" );
+
+	if ( XInputLibrary )
+	{
+		XInputGetState = ( x_input_get_state* ) GetProcAddress( XInputLibrary , "XInputGetState" );
+		XInputSetState = ( x_input_set_state* ) GetProcAddress( XInputLibrary , "XInputSetState" );
+	}
+}
 
 internal void RenderWeirdGradient( win32_offscreen_buffer Buffer , int XOffset , int YOffset )
 {
@@ -82,7 +113,7 @@ internal void Win32ResizeDIBSection(
 	int Height
 )	//DIB: Device Independent Bitmap
 {
-	//to do improve memory usage
+	//improve memory usage
 
 	if ( Buffer->Memory )
 	{
@@ -107,7 +138,7 @@ internal void Win32ResizeDIBSection(
 	int BitmapMemorySize = ( Buffer->Width * Buffer->Height ) * BytesPerPixel;
 	Buffer->Memory = VirtualAlloc( 0 , BitmapMemorySize , MEM_COMMIT , PAGE_READWRITE );
 
-	//to do clear window to black
+	//clear window to black
 	Buffer->Pitch = Width * BytesPerPixel;
 }
 
@@ -118,8 +149,8 @@ internal void Win32DisplayBufferInWindow(
 	win32_offscreen_buffer Buffer
 )
 {
-	//to do aspect ratio correction
-	//to do play with stretch modes
+	//aspect ratio correction
+	//play with stretch modes
 	StretchDIBits(
 		DeviceContext ,
 		0 ,				//destination
@@ -149,7 +180,7 @@ LRESULT CALLBACK Win32MainWindowCallBack(
 	{
 		case WM_CLOSE:
 		{
-			GlobalRunning = false;	//to do handle with message to the user
+			GlobalRunning = false;	//handle with message to the user
 		}break;
 
 		case WM_ACTIVATEAPP:
@@ -159,7 +190,7 @@ LRESULT CALLBACK Win32MainWindowCallBack(
 
 		case WM_DESTROY:
 		{
-			GlobalRunning = false;	//to do handle this as an error and recreate window
+			GlobalRunning = false;	//handle this as an error and recreate window
 		}break;
 
 		case WM_PAINT:
@@ -191,9 +222,8 @@ int WINAPI wWinMain( HINSTANCE Instance ,
 ) //WinMain entry point
 {
 	//all of these codes from here ...
+	Win32LoadXInput( );
 	WNDCLASS WindowClass = {};	//initialise a window and clear to zero
-
-	//win32_window_dimension Dimension = Win32GetWindowDimension( Window );
 	Win32ResizeDIBSection( &GlobalBackbuffer , 1280 , 720 );
 
 	WindowClass.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
@@ -201,7 +231,6 @@ int WINAPI wWinMain( HINSTANCE Instance ,
 	WindowClass.hInstance = Instance;
 	//WindowClass.hIcon = ;	//to do later
 	WindowClass.lpszClassName = "GameWindowClass";	//name for window class so we can call this to create a window
-
 	//... to here goes into the stack
 
 	if ( RegisterClass( &WindowClass ) )
@@ -239,6 +268,37 @@ int WINAPI wWinMain( HINSTANCE Instance ,
 					TranslateMessage( &Message );
 					DispatchMessage( &Message );
 				}
+
+				for ( DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ++ControllerIndex )	//should we poll this more frequently?
+				{
+					XINPUT_STATE ControllerState;
+					if ( XInputGetState( ControllerIndex , &ControllerState ) == ERROR_SUCCESS )
+					{
+						//controller is plugged in
+						//see if ControllerState.dwPacketNumber increments too rapidly
+						XINPUT_GAMEPAD* Pad = &ControllerState.Gamepad;
+						bool Up = ( Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP );
+						bool Down = ( Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN );
+						bool Left = ( Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT );
+						bool Right = ( Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT );
+						bool Start = ( Pad->wButtons & XINPUT_GAMEPAD_START );
+						bool Back = ( Pad->wButtons & XINPUT_GAMEPAD_BACK );
+						bool LeftShoulder = ( Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER );
+						bool RightShoulder = ( Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER );
+						bool AButton = ( Pad->wButtons & XINPUT_GAMEPAD_A );
+						bool BButton = ( Pad->wButtons & XINPUT_GAMEPAD_B );
+						bool XButton = ( Pad->wButtons & XINPUT_GAMEPAD_X );
+						bool YButton = ( Pad->wButtons & XINPUT_GAMEPAD_Y );
+
+						int16 StickX = Pad->sThumbLX;
+						int16 StickY = Pad->sThumbLY;
+					}
+					else
+					{
+						//controller is not available
+					}
+				}
+
 				RenderWeirdGradient( GlobalBackbuffer , XOffset , YOffset );
 				win32_window_dimension Dimension = Win32GetWindowDimension( Window );
 				Win32DisplayBufferInWindow( DeviceContext , Dimension.Width , Dimension.Height , GlobalBackbuffer );
@@ -248,12 +308,12 @@ int WINAPI wWinMain( HINSTANCE Instance ,
 		}
 		else
 		{
-			//to do error handling
+			//error handling
 		}
 	}
 	else
 	{
-		//to do logging later
+		//logging later
 	}
 	return( 0 );
 }
